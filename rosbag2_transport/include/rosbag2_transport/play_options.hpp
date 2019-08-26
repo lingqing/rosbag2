@@ -25,6 +25,7 @@ struct PlayOptions
 {
 public:
   size_t read_ahead_queue_size;
+  size_t start_time;
   std::string node_prefix = "";
 };
 

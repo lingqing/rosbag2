@@ -33,8 +33,12 @@ class PlayVerb(VerbExtension):
             help='size of message queue rosbag tries to hold in memory to help deterministic '
                  'playback. Larger size will result in larger memory needs but might prevent '
                  'delay of message playback.')
+        parser.add_argument(
+            '-t', '--start-time', type=int, default=0,
+            help='time bag play from when, unit: second ')
 
     def main(self, *, args):  # noqa: D102
+        # print('start time ', args.start_time)
         bag_file = args.bag_file
         if not os.path.exists(bag_file):
             return "[ERROR] [ros2bag] bag file '{}' does not exist!".format(bag_file)
@@ -43,4 +47,6 @@ class PlayVerb(VerbExtension):
             uri=bag_file,
             storage_id=args.storage,
             node_prefix=NODE_NAME_PREFIX,
-            read_ahead_queue_size=args.read_ahead_queue_size)
+            start_time=args.start_time,
+            read_ahead_queue_size=args.read_ahead_queue_size
+            )

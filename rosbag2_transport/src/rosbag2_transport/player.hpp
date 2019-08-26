@@ -71,13 +71,18 @@ private:
   std::shared_ptr<rosbag2::SequentialReader> reader_;
   moodycamel::ReaderWriterQueue<ReplayableMessage> message_queue_;
   std::chrono::time_point<std::chrono::system_clock> start_time_;
-  mutable std::future<void> storage_loading_future_, key_control_future_;
+  mutable std::future<void> storage_loading_future_, key_control_future_, playing_status_future_;
   std::shared_ptr<Rosbag2Node> rosbag2_transport_;
   std::unordered_map<std::string, std::shared_ptr<GenericPublisher>> publishers_;
 
-  PlayingStatus playing_status_;
+  PlayingStatus playing_status_ = PLAYING;
+  std::string playing_status_string_ = "RUNNING";
+  rcutils_time_point_value_t bag_start_time_;
+  rcutils_time_point_value_t playing_time_;
+  rcutils_time_point_value_t total_time_;
   void get_key_control();
   void switch_pause_status();
+  void print_playing_status() const;
 };
 
 }  // namespace rosbag2_transport

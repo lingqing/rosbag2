@@ -59,10 +59,13 @@ void Player::play(const PlayOptions & options)
   storage_loading_future_ = std::async(std::launch::async,
       [this, options]() {load_storage_content(options);});
 
-  /*key_control_future_ = std::async(std::launch::async,
-      [this]() {get_key_control();});*/
-
   wait_for_filled_queue(options);
+
+  key_control_future_ = std::async(std::launch::async,
+      [this]() {get_key_control();});
+
+  playing_status_future_ = std::async(std::launch::async,
+      [this]() {print_playing_status();});
 
   play_messages_from_queue();
 }
@@ -72,15 +75,17 @@ void Player::switch_pause_status()
   if(playing_status_ == PAUSE)
   {
     playing_status_ = PLAYING;
-    std::cout << "Play status switch to [ PLAYING ] " << std::endl;
+    playing_status_string_ = "RUNNING";
+    // std::cout << "Play status switch to [ PLAYING ] " << std::endl;
   }
   else
   {
-    std::cout << "Play status switch to [ PAUSE ] " << std::endl;
+    // std::cout << "Play status switch to [ PAUSE ] " << std::endl;
     playing_status_ = PAUSE;
+    playing_status_string_ = "PAUSED";
   }
 }
-/*
+
 #include <termio.h>
 
 int getch(void)
@@ -105,21 +110,38 @@ int getch(void)
 
      return ch;
 }
-*/
+
+void Player::print_playing_status() const
+{
+  printf("\n");
+  while (!is_storage_completely_loaded() && rclcpp::ok())
+  {
+    printf("\r[%-7s] Bag Time: %.3f; Duration: %.3f",
+		playing_status_string_.c_str(), 
+		std::chrono::nanoseconds((playing_time_)).count() * 1e-9,
+		std::chrono::nanoseconds((playing_time_ - bag_start_time_)).count() * 1e-9
+		// std::chrono::nanoseconds((total_time_)).count() * 1e-9
+		); 
+    fflush(stdout); 
+    std::this_thread::sleep_for(queue_read_wait_period_);
+  }
+  printf("tread exit\n");
+}
+
 void Player::get_key_control()
 {
-  std::cout << "get key control thread " << std::endl;
-  /*while (rclcpp::ok())
+  // std::cout << "get key control thread " << std::endl;
+  while (!is_storage_completely_loaded() && rclcpp::ok())
   {
     char ch = getch();
-    std::cout << "get input " << ch << std::endl;
+    // std::cout << "get input " << ch << std::endl;
     if(ch == ' ')
     {
 	switch_pause_status();
     }
-    if(ch == 0x03) break;
+    if(ch == 0x03) break;    
     std::this_thread::sleep_for(queue_read_wait_period_);
-  }*/
+  }
 }
 
 void Player::wait_for_filled_queue(const PlayOptions & options) const
@@ -136,10 +158,20 @@ void Player::load_storage_content(const PlayOptions & options)
 {
   TimePoint time_first_message;
 
-  ReplayableMessage message;
+  ReplayableMessage message;  
   if (reader_->has_next()) {
     message.message = reader_->read_next();
     message.time_since_start = std::chrono::nanoseconds(0);
+    bag_start_time_ = message.message->time_stamp + options.start_time * 1e9;
+    while(reader_->has_next() && rclcpp::ok())
+    {
+      if(message.message->time_stamp >= bag_start_time_)
+      {
+        break; 
+      }
+      message.message = reader_->read_next();
+    }
+    bag_start_time_ = message.message->time_stamp;
     time_first_message = TimePoint(std::chrono::nanoseconds(message.message->time_stamp));
     message_queue_.enqueue(message);
   }
@@ -169,6 +201,7 @@ void Player::enqueue_up_to_boundary(const TimePoint & time_first_message, uint64
       TimePoint(std::chrono::nanoseconds(message.message->time_stamp)) - time_first_message;
 
     message_queue_.enqueue(message);
+    // total_time_ = message.message->time_stamp - bag_start_time_;
   }
 }
 
@@ -188,9 +221,20 @@ void Player::play_messages_until_queue_empty()
 {
   ReplayableMessage message;
   while (message_queue_.try_dequeue(message) && rclcpp::ok()) {
-    std::this_thread::sleep_until(start_time_ + message.time_since_start);
-    if (rclcpp::ok()) {
-      publishers_[message.message->topic_name]->publish(message.message->serialized_data);
+    if(playing_status_ == PLAYING)
+    {
+      std::this_thread::sleep_until(start_time_ + message.time_since_start);
+      if (rclcpp::ok()) {
+        publishers_[message.message->topic_name]->publish(message.message->serialized_data);
+      }
+      playing_time_ = message.message->time_stamp;
+      // auto d = std::chrono::nanoseconds(playing_time_ - bag_start_time_);
+      // std::cout << "Playing time :" <<  d.count() << std::endl;
+    }
+    else
+    {
+      start_time_ += queue_read_wait_period_;
+      std::this_thread::sleep_for(queue_read_wait_period_);
     }
   }
 }
