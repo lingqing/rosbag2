@@ -59,9 +59,67 @@ void Player::play(const PlayOptions & options)
   storage_loading_future_ = std::async(std::launch::async,
       [this, options]() {load_storage_content(options);});
 
+  /*key_control_future_ = std::async(std::launch::async,
+      [this]() {get_key_control();});*/
+
   wait_for_filled_queue(options);
 
   play_messages_from_queue();
+}
+
+void Player::switch_pause_status()
+{
+  if(playing_status_ == PAUSE)
+  {
+    playing_status_ = PLAYING;
+    std::cout << "Play status switch to [ PLAYING ] " << std::endl;
+  }
+  else
+  {
+    std::cout << "Play status switch to [ PAUSE ] " << std::endl;
+    playing_status_ = PAUSE;
+  }
+}
+/*
+#include <termio.h>
+
+int getch(void)
+{
+     struct termios tm, tm_old;
+     int fd = 0, ch;
+
+     if (tcgetattr(fd, &tm) < 0) {
+          return -1;
+     }
+
+     tm_old = tm;
+     cfmakeraw(&tm);
+     if (tcsetattr(fd, TCSANOW, &tm) < 0) {
+          return -1;
+     }
+
+     ch = getchar();
+     if (tcsetattr(fd, TCSANOW, &tm_old) < 0) {
+          return -1;
+     }
+
+     return ch;
+}
+*/
+void Player::get_key_control()
+{
+  std::cout << "get key control thread " << std::endl;
+  /*while (rclcpp::ok())
+  {
+    char ch = getch();
+    std::cout << "get input " << ch << std::endl;
+    if(ch == ' ')
+    {
+	switch_pause_status();
+    }
+    if(ch == 0x03) break;
+    std::this_thread::sleep_for(queue_read_wait_period_);
+  }*/
 }
 
 void Player::wait_for_filled_queue(const PlayOptions & options) const

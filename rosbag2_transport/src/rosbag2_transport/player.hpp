@@ -37,6 +37,13 @@ class SequentialReader;
 namespace rosbag2_transport
 {
 
+
+typedef enum{
+   PLAYING,
+   PAUSE
+}PlayingStatus;
+
+
 class GenericPublisher;
 class Rosbag2Node;
 
@@ -64,9 +71,13 @@ private:
   std::shared_ptr<rosbag2::SequentialReader> reader_;
   moodycamel::ReaderWriterQueue<ReplayableMessage> message_queue_;
   std::chrono::time_point<std::chrono::system_clock> start_time_;
-  mutable std::future<void> storage_loading_future_;
+  mutable std::future<void> storage_loading_future_, key_control_future_;
   std::shared_ptr<Rosbag2Node> rosbag2_transport_;
   std::unordered_map<std::string, std::shared_ptr<GenericPublisher>> publishers_;
+
+  PlayingStatus playing_status_;
+  void get_key_control();
+  void switch_pause_status();
 };
 
 }  // namespace rosbag2_transport
