@@ -114,7 +114,7 @@ int getch(void)
 void Player::print_playing_status() const
 {
   printf("\n");
-  while (!is_storage_completely_loaded() && rclcpp::ok())
+  while (rclcpp::ok())
   {
     printf("\r[%-7s] Bag Time: %.3f; Duration: %.3f",
 		playing_status_string_.c_str(), 
@@ -125,13 +125,13 @@ void Player::print_playing_status() const
     fflush(stdout); 
     std::this_thread::sleep_for(queue_read_wait_period_);
   }
-  printf("tread exit\n");
+  // printf("tread exit\n");
 }
 
 void Player::get_key_control()
 {
   // std::cout << "get key control thread " << std::endl;
-  while (!is_storage_completely_loaded() && rclcpp::ok())
+  while (rclcpp::ok())
   {
     char ch = getch();
     // std::cout << "get input " << ch << std::endl;
@@ -221,21 +221,29 @@ void Player::play_messages_until_queue_empty()
 {
   ReplayableMessage message;
   while (message_queue_.try_dequeue(message) && rclcpp::ok()) {
+    static PlayingStatus last_status = playing_status_;
     if(playing_status_ == PLAYING)
     {
-      std::this_thread::sleep_until(start_time_ + message.time_since_start);
+      if(last_status == PAUSE)
+      {
+        start_time_ = std::chrono::system_clock::now() - message.time_since_start;
+      }
+      else std::this_thread::sleep_until(start_time_ + message.time_since_start);
       if (rclcpp::ok()) {
         publishers_[message.message->topic_name]->publish(message.message->serialized_data);
       }
       playing_time_ = message.message->time_stamp;
-      // auto d = std::chrono::nanoseconds(playing_time_ - bag_start_time_);
-      // std::cout << "Playing time :" <<  d.count() << std::endl;
+      last_status = PLAYING;
     }
     else
     {
-      start_time_ += queue_read_wait_period_;
-      std::this_thread::sleep_for(queue_read_wait_period_);
-    }
+      // start_time_ += queue_read_wait_period_;
+      while(playing_status_ == PAUSE && rclcpp::ok())
+      {
+        std::this_thread::sleep_for(queue_read_wait_period_);      
+      }
+      last_status = PAUSE;
+    }    
   }
 }
 
