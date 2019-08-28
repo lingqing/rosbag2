@@ -111,6 +111,16 @@ int getch(void)
      return ch;
 }
 
+int tc_flush_in()
+{
+  int fd = 0;
+  if(tcflush(fd, TCIFLUSH) < 0)
+  {
+    return -1;
+  }
+  return 0;
+}
+
 void Player::print_playing_status() const
 {
   printf("\n");
@@ -139,7 +149,12 @@ void Player::get_key_control()
     {
 	switch_pause_status();
     }
-    if(ch == 0x03) break;    
+    else if(ch == 0x03) break;    
+    else if(ch == 's')
+    {
+      play_message_one_step();
+    }
+    tc_flush_in();
     std::this_thread::sleep_for(queue_read_wait_period_);
   }
 }
@@ -215,6 +230,18 @@ void Player::play_messages_from_queue()
         "increasing the --read-ahead-queue-size option.");
     }
   } while (!is_storage_completely_loaded() && rclcpp::ok());
+}
+
+void Player::play_message_one_step()
+{
+  if(playing_status_ != PAUSE) return;
+  ReplayableMessage message;
+  if (message_queue_.try_dequeue(message) && rclcpp::ok()) {    
+    if (rclcpp::ok()) {
+      publishers_[message.message->topic_name]->publish(message.message->serialized_data);
+    }
+    playing_time_ = message.message->time_stamp;      
+  }
 }
 
 void Player::play_messages_until_queue_empty()

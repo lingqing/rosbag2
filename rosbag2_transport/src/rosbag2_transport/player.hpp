@@ -83,6 +83,7 @@ private:
   void get_key_control();
   void switch_pause_status();
   void print_playing_status() const;
+  void play_message_one_step();
 };
 
 }  // namespace rosbag2_transport
