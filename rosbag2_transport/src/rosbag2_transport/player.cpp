@@ -87,7 +87,51 @@ void Player::switch_pause_status()
 }
 
 #include <termio.h>
+#include <sys/types.h>
+#include <unistd.h>
 
+static struct termios ori_attr, cur_attr;
+static __inline
+    int tty_reset(void)
+    {
+            if (tcsetattr(STDIN_FILENO, TCSANOW, &ori_attr) != 0)
+                    return -1;
+ 
+            return 0;
+    }
+
+static __inline
+    int tty_set(void)
+    {
+           
+            if ( tcgetattr(STDIN_FILENO, &ori_attr) )
+                    return -1;
+           
+            memcpy(&cur_attr, &ori_attr, sizeof(cur_attr) );
+            cur_attr.c_lflag &= ~ICANON;
+    //        cur_attr.c_lflag |= ECHO;
+            cur_attr.c_lflag &= ~ECHO;
+            cur_attr.c_cc[VMIN] = 1;
+            cur_attr.c_cc[VTIME] = 0;
+ 
+            if (tcsetattr(STDIN_FILENO, TCSANOW, &cur_attr) != 0)
+                    return -1;
+ 
+            return 0;
+
+    }
+
+static __inline
+int kbhit()
+{
+    struct timeval tv = { 0L, 0L };
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(0, &fds);
+    return select(1, &fds, NULL, NULL, &tv);
+}
+
+static __inline
 int getch(void)
 {
      struct termios tm, tm_old;
@@ -111,6 +155,7 @@ int getch(void)
      return ch;
 }
 
+static __inline
 int tc_flush_in()
 {
   int fd = 0;
@@ -124,7 +169,7 @@ int tc_flush_in()
 void Player::print_playing_status() const
 {
   printf("\n");
-  while (rclcpp::ok())
+  while (rclcpp::ok() && !finished_)
   {
     printf("\r[%-7s] Bag Time: %.3f; Duration: %.3f",
 		playing_status_string_.c_str(), 
@@ -141,22 +186,30 @@ void Player::print_playing_status() const
 void Player::get_key_control()
 {
   // std::cout << "get key control thread " << std::endl;
-  while (rclcpp::ok())
+  int tty_set_flag;
+  tty_set_flag = tty_set();
+
+  while (rclcpp::ok() && !finished_)
   {
-    char ch = getch();
-    // std::cout << "get input " << ch << std::endl;
-    if(ch == ' ')
+    if(kbhit())
     {
-	switch_pause_status();
+      char ch = getch();
+      // std::cout << "get input " << ch << std::endl;
+      if(ch == ' ')
+      {
+        switch_pause_status();
+      }
+      else if(ch == 0x03) break;    
+      else if(ch == 's')
+      {
+        play_message_one_step();
+      }
+      if(!finished_) tc_flush_in();
     }
-    else if(ch == 0x03) break;    
-    else if(ch == 's')
-    {
-      play_message_one_step();
-    }
-    tc_flush_in();
     std::this_thread::sleep_for(queue_read_wait_period_);
   }
+  if(tty_set_flag == 0) tty_reset();
+  // printf("key over\n");
 }
 
 void Player::wait_for_filled_queue(const PlayOptions & options) const
@@ -246,6 +299,7 @@ void Player::play_message_one_step()
 
 void Player::play_messages_until_queue_empty()
 {
+  finished_ = false;
   ReplayableMessage message;
   while (message_queue_.try_dequeue(message) && rclcpp::ok()) {
     static PlayingStatus last_status = playing_status_;
@@ -272,6 +326,9 @@ void Player::play_messages_until_queue_empty()
       last_status = PAUSE;
     }    
   }
+  finished_ = true;
+  std::this_thread::sleep_for(queue_read_wait_period_ * 2);
+  printf("\r\n[Finish ]\r\n");
 }
 
 void Player::prepare_publishers()

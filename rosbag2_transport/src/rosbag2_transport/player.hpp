@@ -75,6 +75,7 @@ private:
   std::shared_ptr<Rosbag2Node> rosbag2_transport_;
   std::unordered_map<std::string, std::shared_ptr<GenericPublisher>> publishers_;
 
+  bool finished_ = false;
   PlayingStatus playing_status_ = PLAYING;
   std::string playing_status_string_ = "RUNNING";
   rcutils_time_point_value_t bag_start_time_;
